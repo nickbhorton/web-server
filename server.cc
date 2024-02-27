@@ -29,13 +29,20 @@ enum class HttpMethod {
 };
 
 std::tuple<HttpMethod, std::string, std::string> process_first_line(std::string first_line) {
-    std::cout << "first line is: " << first_line << "\n";
-    return {HttpMethod::GET, "", ""};
+    HttpMethod method = HttpMethod::GET;
+    std::string path{};
+    std::string version{};
+    std::stringstream ss{first_line};
+    std::string line{};
+    while (getline(ss, line, ' ')) {
+        std::cout << line << "\n";
+    }
+    return {method, path, version};
 }
 
 // https://stackoverflow.com/questions/1798112/removing-leading-and-trailing-spaces-from-a-string
 std::string trim(const std::string& str,
-                 const std::string& whitespace = " \t")
+                 const std::string& whitespace = " \t\n\r")
 {
     const auto strBegin = str.find_first_not_of(whitespace);
     if (strBegin == std::string::npos)
@@ -99,10 +106,6 @@ int main(int argc, char** argv) {
             size_t found = request_line.find(":");
             if (found != std::string::npos) {
                 headers[trim(request_line.substr(0, found))] = trim(request_line.substr(found + 1));
-            }
-            else {
-                std::cout << "color character was no found in field" << "\n";
-                std::cout << "\t"<< trim(request_line) << "\n";
             }
         }
     }
