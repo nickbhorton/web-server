@@ -6,15 +6,25 @@
 #include <tuple>
 #include <vector>
 #include <format>
+#include <fstream>
 
 #include <sys/socket.h>
 #include <arpa/inet.h> // sockaddr_in
+#include <sys/stat.h>
 
 enum class LogLevel {
     INFO,
     WARNING,
     ERROR
 };
+
+bool is_valid_path(const std::string& path) {
+    struct stat sb;
+    if (stat(path.c_str(), &sb) == 0) {
+        return true;
+    }
+    return false;
+}
 
 std::ostream& operator<<(std::ostream & os, LogLevel level) {
     switch (level) {
@@ -38,7 +48,7 @@ void log(LogLevel level, const std::string& message, std::ostream& os = std::cou
 }
 
 void die(const std::string& msg) {
-    log(LogLevel::ERROR, std::strerror(errno));
+    log(LogLevel::ERROR, std::strerror(errno) + std::format(": {}", msg));
     std::exit(EXIT_FAILURE);
 }
 
@@ -115,9 +125,17 @@ std::tuple<HttpMethod, std::string, std::string> process_first_line(std::string 
 
 
 int main(int argc, char** argv) {
-    if (argc != 3) {
-        die("2 cmd args reqired | <address> <port>");
+    if (argc != 4) {
+        die("2 cmd args reqired | <address> <port> <mount directory>");
     }
+    // setup filesystem we are mounting
+    std::string mount_dir(argv[3]);
+    log(LogLevel::INFO, "server mount directory: " + mount_dir);
+    if (!is_valid_path(mount_dir)) {
+        die("given mount path was not valid");
+    }
+
+    // create socket
     int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (socket_fd < 0) {
         die("socket");
@@ -185,37 +203,46 @@ int main(int argc, char** argv) {
             }
         }
         // processing and printing of request
-        auto [method, path, version] = process_first_line(first_line);
+        auto [method, url, version] = process_first_line(first_line);
         log(LogLevel::INFO, std::format("HTTP method {}", to_string(method)));
-        log(LogLevel::INFO, std::format("HTTP path {}", path));
+        log(LogLevel::INFO, std::format("HTTP path {}", url));
         log(LogLevel::INFO, std::format("HTTP version {}", version));
         
-        // sending a hardcoded response back to the client
-        std::stringstream response_stream;
-        response_stream << "HTTP/1.1 200 Ok\r\n";
-        response_stream << "Content-Type: text/html\r\n";
-        response_stream << "Connection: close\r\n\r\n";
-
-        response_stream << "<!DOCTYPE html>";
-        response_stream << "<html lang=\"en\">";
-        response_stream << "<head>";
-        response_stream << "  <meta charset=\"utf-8\">";
-        response_stream << "  <title>Penis</title>";
-        response_stream << "</head>";
-        response_stream << "<body>";
-        response_stream << "  <h1>";
-        response_stream << path.substr(1);
-        response_stream << " is GAY";
-        response_stream << "  </h1>";
-        response_stream << "</body>";
-        response_stream << "</html>";
-        int bytes_sent = send(connection_fd, response_stream.str().data(), response_stream.str().length(), 0);
-        if (bytes_sent < 0) {
-            die("send");
+        if (url == "/") {
+            std::stringstream response_stream;
+            response_stream << "HTTP/1.1 200 Ok\r\n";
+            response_stream << "Content-Type: text/html\r\n";
+            response_stream << "Connection: close\r\n\r\n";
+            std::string url_formatted =std::format("{}/{}", mount_dir, "index.html");
+            if (!is_valid_path(url_formatted)) {
+                die("could not find " + url_formatted);
+            }
+            // get index.html
+            std::ifstream file(url_formatted);
+            std::stringstream buffer;
+            response_stream << file.rdbuf();
+            //
+            int bytes_sent = send(connection_fd, response_stream.str().data(), response_stream.str().length(), 0);
+            if (bytes_sent < 0) {
+                die("send");
+            }
+            log(LogLevel::INFO, "bytes written to client: " + std::to_string(bytes_sent));
+            close(connection_fd);
+            log(LogLevel::INFO, std::format("connection closed: {}", connection_fd));
         }
-        log(LogLevel::INFO, "bytes written to client: " + std::to_string(bytes_sent));
-        close(connection_fd);
-        log(LogLevel::INFO, std::format("connection closed: {}", connection_fd));
+        else {
+            std::stringstream response_stream;
+            response_stream << "HTTP/1.1 404 Not Found\r\n";
+            response_stream << "Content-Type: text/html\r\n";
+            response_stream << "Connection: close\r\n\r\n";
+            int bytes_sent = send(connection_fd, response_stream.str().data(), response_stream.str().length(), 0);
+            if (bytes_sent < 0) {
+                die("send");
+            }
+            log(LogLevel::INFO, "bytes written to client: " + std::to_string(bytes_sent));
+            close(connection_fd);
+            log(LogLevel::INFO, std::format("connection closed: {}", connection_fd));
+        }
     }
     return 0;
 }

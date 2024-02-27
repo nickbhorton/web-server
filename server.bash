@@ -10,6 +10,7 @@ cat .env
 
 server_address=$WEBSERVER_ADDRESS
 port=$WEBSERVER_PORT
+mount=$WEBSERVER_MOUNT
 
 echo "hosting address: $server_address:$port"
 
@@ -18,7 +19,7 @@ echo "hosting address: $server_address:$port"
 
 rm out.txt.prev > /dev/null 2>&1
 mv out.txt out.txt.prev > /dev/null 2>&1
-./server $server_address $port > out.txt 2>&1 &
+./server $server_address $port $mount > out.txt 2>&1 &
 server_pid=$!
 tail out.txt -f &
 tail_pid=$!
