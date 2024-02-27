@@ -20,6 +20,10 @@ int main(int argc, char** argv) {
     if (socket_fd < 0) {
         die("socket");
     }
+    int option = 1;
+    if (setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option))  < 0) {
+        die("setsockopt");
+    }
     sockaddr_in server_address{};
     server_address.sin_family        = AF_INET;
     server_address.sin_port          = htons(std::stoi(argv[2]));
