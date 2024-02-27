@@ -151,9 +151,14 @@ int main(int argc, char** argv) {
 
         constexpr int BUFFER_SIZE = 30720;
         char buffer[BUFFER_SIZE] = {0};
-        int bytes_received = read(connection_fd , buffer, BUFFER_SIZE);
+        int bytes_received = recv(connection_fd, buffer, BUFFER_SIZE, 0);
         if (bytes_received < 0) {
             die("Failed to read bytes from client socket connection");
+        }
+        else if (bytes_received == 0) {
+            log(LogLevel::WARNING, "client closed connection");
+            close(connection_fd);
+            continue;
         }
         log(LogLevel::INFO, "bytes recieved from client: " + std::to_string(bytes_received));
 
@@ -204,7 +209,10 @@ int main(int argc, char** argv) {
         response_stream << "  </h1>";
         response_stream << "</body>";
         response_stream << "</html>";
-        int bytes_sent = write(connection_fd, response_stream.str().data(), response_stream.str().length());
+        int bytes_sent = send(connection_fd, response_stream.str().data(), response_stream.str().length(), 0);
+        if (bytes_sent < 0) {
+            die("send");
+        }
         log(LogLevel::INFO, "bytes written to client: " + std::to_string(bytes_sent));
         close(connection_fd);
         log(LogLevel::INFO, std::format("connection closed: {}", connection_fd));
