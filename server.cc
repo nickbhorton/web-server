@@ -28,5 +28,9 @@ int main(int argc, char** argv) {
     if (listen(socket_fd, 5)) {
         die("listen");
     }
+    sockaddr_in connected_address{};
+    socklen_t connected_address_size{};
+    int connection_fd = accept(socket_fd, (sockaddr *)&connected_address, &connected_address_size);
+    std::cout << connection_fd << "\n";
     return 0;
 }
