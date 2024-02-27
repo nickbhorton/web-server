@@ -13,6 +13,6 @@ int main() {
     if (socket_fd < 0) {
         die("socket");
     }
-    std::cout << socket_fd << "\n";
+    std::cout << "socket_fd: " << socket_fd << "\n";
     return 0;
 }
