@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <sstream>
 #include <map>
+#include <tuple>
 
 #include <sys/socket.h>
 #include <arpa/inet.h> // sockaddr_in
@@ -14,7 +15,22 @@ void die(const std::string& msg) {
 }
 
 std::ostream& operator<<(std::ostream & os, std::map<std::string, std::string> map) {
+    std::map<std::string, std::string>::iterator it = map.begin();
+    while (it != map.end()) {
+        os << "Key: " << it->first
+             << ", Value: " << it->second << "\n";
+        ++it;
+    }
     return os;
+}
+
+enum class HttpMethod {
+    GET
+};
+
+std::tuple<HttpMethod, std::string, std::string> process_first_line(std::string first_line) {
+    std::cout << "first line is: " << first_line << "\n";
+    return {HttpMethod::GET, "", ""};
 }
 
 // https://stackoverflow.com/questions/1798112/removing-leading-and-trailing-spaces-from-a-string
@@ -70,19 +86,28 @@ int main(int argc, char** argv) {
     std::string request(buffer, bytes_received);
     std::stringstream request_stream(request);
     std::string request_line{};
-    int line_count = 0;
+    std::string first_line{};
     std::map<std::string, std::string> headers{};
+    int line_count = 0;
+    // read through request and store useful info for latter
     while (std::getline(request_stream, request_line)) {
         line_count++;
-        size_t found = request_line.find(":");
-        if (found != std::string::npos) {
-            headers[trim(request_line.substr(0, found))] = trim(request_line.substr(found + 1));
+        if (line_count == 1) {
+            first_line = request_line;
         }
         else {
-            std::cout << "color character was no found in field" << "\n";
-            std::cout << "\t"<< trim(request_line) << "\n";
+            size_t found = request_line.find(":");
+            if (found != std::string::npos) {
+                headers[trim(request_line.substr(0, found))] = trim(request_line.substr(found + 1));
+            }
+            else {
+                std::cout << "color character was no found in field" << "\n";
+                std::cout << "\t"<< trim(request_line) << "\n";
+            }
         }
     }
+    // processing and printing of request
+    process_first_line(first_line);
     std::cout << "HTTP Headers:\n" << headers << "\n";
     
     // sending a hardcoded response back to the client
