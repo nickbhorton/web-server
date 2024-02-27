@@ -31,20 +31,18 @@ int main(int argc, char** argv) {
     }
     sockaddr_in connected_address{};
     socklen_t connected_address_size{};
-    while (1) {
-        int connection_fd = accept(socket_fd, (sockaddr *)&connected_address, &connected_address_size);
-        if (connection_fd < 0) {
-            die("accept");
-        }
-        // std::cout << inet_ntoa(connected_address.sin_addr) << "\n";
-        // std::cout << ntohs(connected_address.sin_port) << "\n";
-        constexpr int BUFFER_SIZE = 30720;
-        char buffer[BUFFER_SIZE] = {0};
-        int bytes_received = read(connection_fd , buffer, BUFFER_SIZE);
-        if (bytes_received < 0) {
-            die("Failed to read bytes from client socket connection");
-        }
-        std::cout << std::string(buffer, bytes_received);
+    int connection_fd = accept(socket_fd, (sockaddr *)&connected_address, &connected_address_size);
+    if (connection_fd < 0) {
+        die("accept");
     }
+    // std::cout << inet_ntoa(connected_address.sin_addr) << "\n";
+    // std::cout << ntohs(connected_address.sin_port) << "\n";
+    constexpr int BUFFER_SIZE = 30720;
+    char buffer[BUFFER_SIZE] = {0};
+    int bytes_received = read(connection_fd , buffer, BUFFER_SIZE);
+    if (bytes_received < 0) {
+        die("Failed to read bytes from client socket connection");
+    }
+    std::cout << std::string(buffer, bytes_received);
     return 0;
 }
