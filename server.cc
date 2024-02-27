@@ -36,29 +36,42 @@ int main(int argc, char** argv) {
     if (connection_fd < 0) {
         die("accept");
     }
+
     // std::cout << inet_ntoa(connected_address.sin_addr) << "\n";
     // std::cout << ntohs(connected_address.sin_port) << "\n";
+
     constexpr int BUFFER_SIZE = 30720;
     char buffer[BUFFER_SIZE] = {0};
     int bytes_received = read(connection_fd , buffer, BUFFER_SIZE);
     if (bytes_received < 0) {
         die("Failed to read bytes from client socket connection");
     }
-    std::cout << std::string(buffer, bytes_received);
-    std::stringstream ss;
-    ss << "HTTP/1.1 200 Ok\r\n";
-    ss << "Content-Type: text/html\r\n\r\n";
-    ss << "<!DOCTYPE html>";
-    ss << "<html lang=\"en\">";
-    ss << "<head>";
-    ss << "  <meta charset=\"utf-8\">";
-    ss << "  <title>A simple webpage</title>";
-    ss << "</head>";
-    ss << "<body>";
-    ss << "  <h1>Simple HTML webpage</h1>";
-    ss << "  <p>Hello, world!</p>";
-    ss << "</body>";
-    ss << "</html>";
-    int bytes_written = write(connection_fd, ss.str().data(), ss.str().length());
+    std::cout << "bytes recieved from client: " << bytes_received << "\n";
+    std::string request(buffer, bytes_received);
+    std::stringstream request_stream(request);
+    std::string request_line{};
+    int line_count = 0;
+    while (std::getline(request_stream, request_line)) {
+        line_count++;
+        std::cout << "line count: " << line_count << "\n";
+        std::cout << request_line << "\n";
+    }
+    
+    // sending a hardcoded response back to the client
+    std::stringstream response_stream;
+    response_stream << "HTTP/1.1 200 Ok\r\n";
+    response_stream << "Content-Type: text/html\r\n\r\n";
+    response_stream << "<!DOCTYPE html>";
+    response_stream << "<html lang=\"en\">";
+    response_stream << "<head>";
+    response_stream << "  <meta charset=\"utf-8\">";
+    response_stream << "  <title>A simple webpage</title>";
+    response_stream << "</head>";
+    response_stream << "<body>";
+    response_stream << "  <h1>Simple HTML webpage</h1>";
+    response_stream << "  <p>Hello, world!</p>";
+    response_stream << "</body>";
+    response_stream << "</html>";
+    int bytes_written = write(connection_fd, response_stream.str().data(), response_stream.str().length());
     return 0;
 }
