@@ -10,7 +10,8 @@ cat .env
 
 server_address=$WEBSERVER_ADDRESS
 port=$WEBSERVER_PORT
-echo "$server_address:$port"
+
+echo "hosting address: $server_address:$port"
 
 # this was used in the server side to use port 8080 instead
 # https://serverfault.com/questions/112795/how-to-run-a-server-on-port-80-as-a-normal-user-on-linux
