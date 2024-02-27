@@ -132,7 +132,7 @@ int main(int argc, char** argv) {
             }
             else {
                 size_t found = request_line.find(":");
-                if (found != std::string::npos) {
+                if (found != std::string::npos && request_line.size() > 0) {
                     headers[trim(request_line.substr(0, found))] = trim(request_line.substr(found + 1));
                 }
             }
