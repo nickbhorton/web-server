@@ -7,6 +7,10 @@
 #include <vector>
 #include <format>
 #include <fstream>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <sys/sendfile.h>
 
 #include <sys/socket.h>
 #include <arpa/inet.h> // sockaddr_in
@@ -227,6 +231,40 @@ int main(int argc, char** argv) {
                 die("send");
             }
             log(LogLevel::INFO, "bytes written to client: " + std::to_string(bytes_sent));
+            close(connection_fd);
+            log(LogLevel::INFO, std::format("connection closed: {}", connection_fd));
+        }
+        else if (is_valid_path(std::format("{}{}", mount_dir, url))) {
+            std::string file_path = std::format("{}{}", mount_dir, url);
+            std::stringstream response_stream;
+            response_stream << "HTTP/1.1 200 Ok\r\n";
+            response_stream << "Content-Type: image/webp\r\n";
+            response_stream << "Connection: close\r\n\r\n";
+            int bytes_sent = send(connection_fd, response_stream.str().data(), response_stream.str().length(), 0);
+            if (bytes_sent < 0) {
+                die("send");
+            }
+            log(LogLevel::INFO, "bytes written to client: " + std::to_string(bytes_sent));
+            int fdimg = open(file_path.c_str(), O_RDONLY);
+            
+            struct stat stat_buf;
+            fstat(fdimg, &stat_buf);
+            int img_total_size = stat_buf.st_size;
+            int block_size = stat_buf.st_blksize;
+
+            int sent_size;
+
+            while(img_total_size > 0){
+                if(img_total_size < block_size){
+                    sent_size = sendfile(connection_fd, fdimg, NULL, img_total_size);            
+                }
+                else{
+                    sent_size = sendfile(connection_fd, fdimg, NULL, block_size);
+                }       
+                log(LogLevel::INFO, std::format("bytes of file written: {}", sent_size));
+                img_total_size = img_total_size - sent_size;
+            }
+            close(fdimg);
             close(connection_fd);
             log(LogLevel::INFO, std::format("connection closed: {}", connection_fd));
         }
