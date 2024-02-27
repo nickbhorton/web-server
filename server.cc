@@ -31,6 +31,10 @@ int main(int argc, char** argv) {
     sockaddr_in connected_address{};
     socklen_t connected_address_size{};
     int connection_fd = accept(socket_fd, (sockaddr *)&connected_address, &connected_address_size);
-    std::cout << connection_fd << "\n";
+    if (connection_fd < 0) {
+        die("accept");
+    }
+    std::cout << inet_ntoa(connected_address.sin_addr) << "\n";
+    std::cout << ntohs(connected_address.sin_port) << "\n";
     return 0;
 }
