@@ -1,2 +1,4 @@
 server
 out.txt
+out.txt.prev
+.env
