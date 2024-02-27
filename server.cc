@@ -61,7 +61,7 @@ std::tuple<HttpMethod, std::string, std::string> process_first_line(std::string 
         parameters.push_back(line);
     }
     if (parameters.size() < 3) {
-        std::cerr << "not enough parameters for the http request\n";
+        std::cerr << "not enough parameters for the http request\n"; 
     }
     else {
         if (trim(parameters[0]) == "GET") {
@@ -155,10 +155,10 @@ int main(int argc, char** argv) {
         response_stream << path.substr(1);
         response_stream << " is GAY";
         response_stream << "  </h1>";
-        response_stream << "  <p>Hello, world!</p>";
         response_stream << "</body>";
         response_stream << "</html>";
         int bytes_written = write(connection_fd, response_stream.str().data(), response_stream.str().length());
+        close (socket_fd);
     }
     return 0;
 }
