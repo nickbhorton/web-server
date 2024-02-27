@@ -151,7 +151,7 @@ int main(int argc, char** argv) {
 
         constexpr int BUFFER_SIZE = 30720;
         char buffer[BUFFER_SIZE] = {0};
-        int bytes_received = recv(connection_fd, buffer, BUFFER_SIZE, MSG_WAITALL);
+        int bytes_received = recv(connection_fd, buffer, BUFFER_SIZE, 0);
         if (bytes_received < 0) {
             die("Failed to read bytes from client socket connection");
         }
