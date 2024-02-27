@@ -57,8 +57,17 @@ int main(int argc, char** argv) {
     int line_count = 0;
     while (std::getline(request_stream, request_line)) {
         line_count++;
-        std::cout << "line count: " << line_count << "\n";
-        std::cout << request_line << "\n";
+        size_t found = request_line.find(":");
+        if (found != std::string::npos) {
+            std::cout << "lhs:\n"; 
+            std::cout << request_line.substr(0, found) << "\n"; 
+            std::cout << "rhs:\n"; 
+            std::cout << request_line.substr(found) << "\n"; 
+        }
+        else {
+            std::cout << "color character was no found in field" << "\n";
+            std::cout << request_line << "\n";
+        }
     }
     
     // sending a hardcoded response back to the client
