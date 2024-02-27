@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cstring> // for std::strerror
+#include <unistd.h>
 
 #include <sys/socket.h>
 #include <arpa/inet.h> // sockaddr_in
@@ -36,5 +37,12 @@ int main(int argc, char** argv) {
     }
     std::cout << inet_ntoa(connected_address.sin_addr) << "\n";
     std::cout << ntohs(connected_address.sin_port) << "\n";
+    constexpr int BUFFER_SIZE = 30720;
+    char buffer[BUFFER_SIZE] = {0};
+    int bytes_received = read(connection_fd , buffer, BUFFER_SIZE);
+    if (bytes_received < 0) {
+        die("Failed to read bytes from client socket connection");
+    }
+    std::cout << std::string(buffer, bytes_received) << "\n";
     return 0;
 }
