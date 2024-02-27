@@ -25,5 +25,8 @@ int main(int argc, char** argv) {
     if (bind(socket_fd, (sockaddr *)&server_address, sizeof(server_address))) {
         die("bind");
     }
+    if (listen(socket_fd, 5)) {
+        die("listen");
+    }
     return 0;
 }
