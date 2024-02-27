@@ -2,6 +2,7 @@
 #include <cstring> // for std::strerror
 #include <unistd.h>
 #include <sstream>
+#include <map>
 
 #include <sys/socket.h>
 #include <arpa/inet.h> // sockaddr_in
@@ -10,6 +11,10 @@
 void die(const std::string& msg) {
     std::cerr << std::strerror(errno) << "\n";
     std::exit(EXIT_FAILURE);
+}
+
+std::ostream& operator<<(std::ostream & os, std::map<std::string, std::string> map) {
+    return os;
 }
 
 // https://stackoverflow.com/questions/1798112/removing-leading-and-trailing-spaces-from-a-string
@@ -55,9 +60,6 @@ int main(int argc, char** argv) {
         die("accept");
     }
 
-    // std::cout << inet_ntoa(connected_address.sin_addr) << "\n";
-    // std::cout << ntohs(connected_address.sin_port) << "\n";
-
     constexpr int BUFFER_SIZE = 30720;
     char buffer[BUFFER_SIZE] = {0};
     int bytes_received = read(connection_fd , buffer, BUFFER_SIZE);
@@ -69,20 +71,19 @@ int main(int argc, char** argv) {
     std::stringstream request_stream(request);
     std::string request_line{};
     int line_count = 0;
+    std::map<std::string, std::string> headers{};
     while (std::getline(request_stream, request_line)) {
         line_count++;
         size_t found = request_line.find(":");
         if (found != std::string::npos) {
-            std::cout << "lhs:\n"; 
-            std::cout << "\t" << trim(request_line.substr(0, found)) << "\n"; 
-            std::cout << "rhs:\n"; 
-            std::cout << "\t"<< trim(request_line.substr(found + 1)) << "\n"; 
+            headers[trim(request_line.substr(0, found))] = trim(request_line.substr(found + 1));
         }
         else {
             std::cout << "color character was no found in field" << "\n";
             std::cout << "\t"<< trim(request_line) << "\n";
         }
     }
+    std::cout << "HTTP Headers:\n" << headers << "\n";
     
     // sending a hardcoded response back to the client
     std::stringstream response_stream;
