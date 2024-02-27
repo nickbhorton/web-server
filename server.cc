@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cstring> // for std::strerror
 #include <unistd.h>
+#include <sstream>
 
 #include <sys/socket.h>
 #include <arpa/inet.h> // sockaddr_in
@@ -44,5 +45,20 @@ int main(int argc, char** argv) {
         die("Failed to read bytes from client socket connection");
     }
     std::cout << std::string(buffer, bytes_received);
+    std::stringstream ss;
+    ss << "HTTP/1.1 200 Ok\r\n";
+    ss << "Content-Type: text/html\r\n\r\n";
+    ss << "<!DOCTYPE html>";
+    ss << "<html lang=\"en\">";
+    ss << "<head>";
+    ss << "  <meta charset=\"utf-8\">";
+    ss << "  <title>A simple webpage</title>";
+    ss << "</head>";
+    ss << "<body>";
+    ss << "  <h1>Simple HTML webpage</h1>";
+    ss << "  <p>Hello, world!</p>";
+    ss << "</body>";
+    ss << "</html>";
+    int bytes_written = write(connection_fd, ss.str().data(), ss.str().length());
     return 0;
 }
