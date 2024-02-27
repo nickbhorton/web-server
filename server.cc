@@ -4,6 +4,7 @@
 #include <sstream>
 #include <map>
 #include <tuple>
+#include <vector>
 
 #include <sys/socket.h>
 #include <arpa/inet.h> // sockaddr_in
@@ -24,22 +25,6 @@ std::ostream& operator<<(std::ostream & os, std::map<std::string, std::string> m
     return os;
 }
 
-enum class HttpMethod {
-    GET
-};
-
-std::tuple<HttpMethod, std::string, std::string> process_first_line(std::string first_line) {
-    HttpMethod method = HttpMethod::GET;
-    std::string path{};
-    std::string version{};
-    std::stringstream ss{first_line};
-    std::string line{};
-    while (getline(ss, line, ' ')) {
-        std::cout << line << "\n";
-    }
-    return {method, path, version};
-}
-
 // https://stackoverflow.com/questions/1798112/removing-leading-and-trailing-spaces-from-a-string
 std::string trim(const std::string& str,
                  const std::string& whitespace = " \t\n\r")
@@ -53,6 +38,44 @@ std::string trim(const std::string& str,
 
     return str.substr(strBegin, strRange);
 }
+
+enum class HttpMethod {
+    GET
+};
+
+std::ostream& operator<<(std::ostream & os, HttpMethod m) {
+    if (m == HttpMethod::GET) {
+        os << "GET";
+    }
+    return os;
+}
+
+std::tuple<HttpMethod, std::string, std::string> process_first_line(std::string first_line) {
+    HttpMethod method = HttpMethod::GET;
+    std::string path{};
+    std::string version{};
+    std::stringstream ss{first_line};
+    std::string line{};
+    std::vector<std::string> parameters;
+    while (getline(ss, line, ' ')) {
+        parameters.push_back(line);
+    }
+    if (parameters.size() < 3) {
+        std::cerr << "not enough parameters for the http request\n";
+    }
+    else {
+        if (trim(parameters[0]) == "GET") {
+            method = HttpMethod::GET;
+        }
+        else {
+            std::cerr << "unknow http method found: " << trim(parameters[0]) << "\n";
+        }
+        path = parameters[1];
+        version = parameters[2];
+    }
+    return {method, path, version};
+}
+
 
 int main(int argc, char** argv) {
     if (argc != 3) {
@@ -110,7 +133,10 @@ int main(int argc, char** argv) {
         }
     }
     // processing and printing of request
-    process_first_line(first_line);
+    auto [method, path, version] = process_first_line(first_line);
+    std::cout << "method: " << method << "\n";
+    std::cout << "path: " << path << "\n";
+    std::cout << "version: " << version << "\n";
     std::cout << "HTTP Headers:\n" << headers << "\n";
     
     // sending a hardcoded response back to the client
