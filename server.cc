@@ -16,6 +16,9 @@ void die(const std::string& msg) {
 }
 
 std::ostream& operator<<(std::ostream & os, std::map<std::string, std::string> map) {
+    if (map.size() <= 0) {
+        return os;
+    }
     std::map<std::string, std::string>::iterator it = map.begin();
     while (it != map.end()) {
         os << "Key: " << it->first
