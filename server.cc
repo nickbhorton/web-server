@@ -106,6 +106,7 @@ int main(int argc, char** argv) {
         if (connection_fd < 0) {
             die("accept");
         }
+        std::cout << "connection accepted\n" << std::flush;
 
         constexpr int BUFFER_SIZE = 30720;
         char buffer[BUFFER_SIZE] = {0};
@@ -113,7 +114,7 @@ int main(int argc, char** argv) {
         if (bytes_received < 0) {
             die("Failed to read bytes from client socket connection");
         }
-        std::cout << "bytes recieved from client: " << bytes_received << "\n";
+        std::cout << "bytes recieved from client: " << bytes_received << "\n" << std::flush;
         std::string request(buffer, bytes_received);
         std::stringstream request_stream(request);
         std::string request_line{};
@@ -135,10 +136,10 @@ int main(int argc, char** argv) {
         }
         // processing and printing of request
         auto [method, path, version] = process_first_line(first_line);
-        std::cout << "method: " << method << "\n";
-        std::cout << "path: " << path << "\n";
-        std::cout << "version: " << version << "\n";
-        std::cout << "HTTP Headers:\n" << headers << "\n";
+        std::cout << "method: " << method << "\n" << std::flush;
+        std::cout << "path: " << path << "\n" << std::flush;
+        std::cout << "version: " << version << "\n" << std::flush;
+        std::cout << "HTTP Headers:\n" << headers << "\n" << std::flush;
         
         // sending a hardcoded response back to the client
         std::stringstream response_stream;
@@ -156,9 +157,8 @@ int main(int argc, char** argv) {
         response_stream << " is GAY";
         response_stream << "  </h1>";
         response_stream << "</body>";
-        response_stream << "</html>";
+        response_stream << "</html>\r\n";
         int bytes_written = write(connection_fd, response_stream.str().data(), response_stream.str().length());
-        close (socket_fd);
     }
     return 0;
 }
