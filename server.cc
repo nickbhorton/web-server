@@ -135,7 +135,9 @@ std::string translate_url(const std::string& url) {
 
 enum class FileType {
     HTML,
-    WEBP
+    CSS,
+    WEBP,
+    JPG
 };
 
 std::ostream& operator<<(std::ostream& os, FileType f) {
@@ -143,8 +145,14 @@ std::ostream& operator<<(std::ostream& os, FileType f) {
         case FileType::HTML:
             os << "text/html";
             break;
+        case FileType::CSS:
+            os << "text/css";
+            break;
         case FileType::WEBP:
             os << "image/webp";
+            break;
+        case FileType::JPG:
+            os << "image/jpg";
             break;
     }
     return os;
@@ -154,8 +162,14 @@ FileType to_file_type(std::string file_extension) {
     if (file_extension == "html") {
         return FileType::HTML;
     }
+    if (file_extension == "css") {
+        return FileType::CSS;
+    }
     if (file_extension == "webp") {
         return FileType::WEBP;
+    }
+    if (file_extension == "jpg") {
+        return FileType::JPG;
     }
     return FileType::HTML;
 }
