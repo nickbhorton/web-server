@@ -6,7 +6,6 @@
 #include <tuple>
 #include <vector>
 #include <format>
-#include <fstream>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -127,6 +126,102 @@ std::tuple<HttpMethod, std::string, std::string> process_first_line(std::string 
     return {method, path, version};
 }
 
+std::string translate_url(const std::string& url) {
+    if (url == "/") {
+        return "/index.html";
+    }
+    return url;
+}
+
+enum class FileType {
+    HTML,
+    WEBP
+};
+
+std::ostream& operator<<(std::ostream& os, FileType f) {
+    switch (f) {
+        case FileType::HTML:
+            os << "text/html";
+            break;
+        case FileType::WEBP:
+            os << "image/webp";
+            break;
+    }
+    return os;
+}
+
+FileType to_file_type(std::string file_extension) {
+    if (file_extension == "html") {
+        return FileType::HTML;
+    }
+    if (file_extension == "webp") {
+        return FileType::WEBP;
+    }
+    return FileType::HTML;
+}
+
+void handle_http_request(
+    int fd, 
+    const std::string& mount_dir,
+    const std::tuple<HttpMethod, std::string, std::string>& request, 
+    const std::map<std::string, std::string>& headers
+) 
+{
+    auto [method, url, version] = request;
+    std::string file_path = std::format("{}{}", mount_dir, translate_url(url));
+    if (is_valid_path(file_path)) {
+        log(LogLevel::INFO, "attempting to send file at path " + file_path);
+        std::string file_extension = file_path.substr(file_path.find_last_of(".") + 1);
+        std::stringstream response_stream;
+        response_stream << "HTTP/1.1 200 Ok\r\n";
+        response_stream << "Content-Type: " << to_file_type(file_extension) << "\r\n";
+        response_stream << "Connection: close\r\n\r\n";
+        int bytes_sent = send(fd, response_stream.str().data(), response_stream.str().length(), 0);
+        if (bytes_sent < 0) {
+            die("send");
+        }
+        log(LogLevel::INFO, "bytes written to client: " + std::to_string(bytes_sent));
+        int fdimg = open(file_path.c_str(), O_RDONLY);
+        
+        struct stat stat_buf;
+        fstat(fdimg, &stat_buf);
+        int img_total_size = stat_buf.st_size;
+        int block_size = stat_buf.st_blksize;
+
+        int sent_size;
+
+        while(img_total_size > 0){
+            if(img_total_size < block_size){
+                sent_size = sendfile(fd, fdimg, NULL, img_total_size);            
+            }
+            else{
+                sent_size = sendfile(fd, fdimg, NULL, block_size);
+            }       
+            if (sent_size < 0) {
+                die("sendfile");
+            }
+            log(LogLevel::INFO, std::format("bytes of file written: {}", sent_size));
+            img_total_size = img_total_size - sent_size;
+        }
+        close(fdimg);
+        close(fd);
+        log(LogLevel::INFO, std::format("connection closed: {}", fd));
+    }
+    else {
+        std::stringstream response_stream;
+        response_stream << "HTTP/1.1 404 Not Found\r\n";
+        response_stream << "Content-Type: text/html\r\n";
+        response_stream << "Connection: close\r\n\r\n";
+        int bytes_sent = send(fd, response_stream.str().data(), response_stream.str().length(), 0);
+        if (bytes_sent < 0) {
+            die("send");
+        }
+        log(LogLevel::INFO, "bytes written to client: " + std::to_string(bytes_sent));
+        close(fd);
+        log(LogLevel::INFO, std::format("connection closed: {}", fd));
+    }
+}
+
 
 int main(int argc, char** argv) {
     if (argc != 4) {
@@ -207,80 +302,7 @@ int main(int argc, char** argv) {
             }
         }
         // processing and printing of request
-        auto [method, url, version] = process_first_line(first_line);
-        log(LogLevel::INFO, std::format("HTTP method {}", to_string(method)));
-        log(LogLevel::INFO, std::format("HTTP path {}", url));
-        log(LogLevel::INFO, std::format("HTTP version {}", version));
-        
-        if (url == "/") {
-            std::stringstream response_stream;
-            response_stream << "HTTP/1.1 200 Ok\r\n";
-            response_stream << "Content-Type: text/html\r\n";
-            response_stream << "Connection: close\r\n\r\n";
-            std::string url_formatted =std::format("{}/{}", mount_dir, "index.html");
-            if (!is_valid_path(url_formatted)) {
-                die("could not find " + url_formatted);
-            }
-            // get index.html
-            std::ifstream file(url_formatted);
-            std::stringstream buffer;
-            response_stream << file.rdbuf();
-            //
-            int bytes_sent = send(connection_fd, response_stream.str().data(), response_stream.str().length(), 0);
-            if (bytes_sent < 0) {
-                die("send");
-            }
-            log(LogLevel::INFO, "bytes written to client: " + std::to_string(bytes_sent));
-            close(connection_fd);
-            log(LogLevel::INFO, std::format("connection closed: {}", connection_fd));
-        }
-        else if (is_valid_path(std::format("{}{}", mount_dir, url))) {
-            std::string file_path = std::format("{}{}", mount_dir, url);
-            std::stringstream response_stream;
-            response_stream << "HTTP/1.1 200 Ok\r\n";
-            response_stream << "Content-Type: image/webp\r\n";
-            response_stream << "Connection: close\r\n\r\n";
-            int bytes_sent = send(connection_fd, response_stream.str().data(), response_stream.str().length(), 0);
-            if (bytes_sent < 0) {
-                die("send");
-            }
-            log(LogLevel::INFO, "bytes written to client: " + std::to_string(bytes_sent));
-            int fdimg = open(file_path.c_str(), O_RDONLY);
-            
-            struct stat stat_buf;
-            fstat(fdimg, &stat_buf);
-            int img_total_size = stat_buf.st_size;
-            int block_size = stat_buf.st_blksize;
-
-            int sent_size;
-
-            while(img_total_size > 0){
-                if(img_total_size < block_size){
-                    sent_size = sendfile(connection_fd, fdimg, NULL, img_total_size);            
-                }
-                else{
-                    sent_size = sendfile(connection_fd, fdimg, NULL, block_size);
-                }       
-                log(LogLevel::INFO, std::format("bytes of file written: {}", sent_size));
-                img_total_size = img_total_size - sent_size;
-            }
-            close(fdimg);
-            close(connection_fd);
-            log(LogLevel::INFO, std::format("connection closed: {}", connection_fd));
-        }
-        else {
-            std::stringstream response_stream;
-            response_stream << "HTTP/1.1 404 Not Found\r\n";
-            response_stream << "Content-Type: text/html\r\n";
-            response_stream << "Connection: close\r\n\r\n";
-            int bytes_sent = send(connection_fd, response_stream.str().data(), response_stream.str().length(), 0);
-            if (bytes_sent < 0) {
-                die("send");
-            }
-            log(LogLevel::INFO, "bytes written to client: " + std::to_string(bytes_sent));
-            close(connection_fd);
-            log(LogLevel::INFO, std::format("connection closed: {}", connection_fd));
-        }
+        handle_http_request(connection_fd, mount_dir, process_first_line(first_line), headers);
     }
     return 0;
 }
