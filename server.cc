@@ -10,6 +10,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <sys/wait.h>
 #include <sys/sendfile.h>
 
 #include <sys/socket.h>
@@ -134,7 +135,13 @@ std::ostream& operator<<(std::ostream & os, HttpMethod m) {
         }
         switch (method) {
             case HttpMethod::POST:
-                log(LogLevel::WARNING, "GET http method not implemented");
+                log(LogLevel::DETAIL, first_line);
+                if (parameters.size() >= 3) {
+                    std::string path = parameters[1];
+                    std::string version = parameters[2];
+                    return std::make_optional<std::tuple<HttpMethod, std::string, std::string>>({method, path, version});
+                }
+                log(LogLevel::ERROR, "process_first_line had less that 3 parameters which does not work for HTTP POST: ");
                 return {};
                 break;
             case HttpMethod::GET:
@@ -243,69 +250,160 @@ FileType to_file_type(std::string file_extension) {
     return FileType::HTML;
 }
 
-void handle_http_request(
+void handle_http_get_request(
     int fd, 
     const std::string& mount_dir,
-    const std::tuple<HttpMethod, std::string, std::string>& request, 
+    const std::string & url, 
     const std::map<std::string, std::string>& headers
 ) 
 {
-    auto [method, url, version] = request;
-    if (method == HttpMethod::GET) {
-        auto [resource_path, parameters_opt] = disect_url(url);
-        std::string file_path = std::format("{}{}", mount_dir, translate_resource_path(resource_path));
-        if (is_valid_path(file_path)) {
-            log(LogLevel::INFO, "client requesting and server sending " + file_path);
-            std::string file_extension = file_path.substr(file_path.find_last_of(".") + 1);
-            std::stringstream response_stream;
-            response_stream << "HTTP/1.1 200 Ok\r\n";
-            response_stream << "Content-Type: " << to_string(to_file_type(file_extension)) << "\r\n";
-            log(LogLevel::DETAIL, "response header " + to_string(to_file_type(file_extension)));
-            response_stream << "Connection: close\r\n\r\n";
-            int bytes_sent = send(fd, response_stream.str().data(), response_stream.str().length(), 0);
-            if (bytes_sent < 0) {
-                die("send");
-            }
-            log(LogLevel::DETAIL, "bytes written to client: " + std::to_string(bytes_sent));
-            int fdimg = open(file_path.c_str(), O_RDONLY);
-
-            struct stat stat_buf;
-            fstat(fdimg, &stat_buf);
-            int img_total_size = stat_buf.st_size;
-            int block_size = stat_buf.st_blksize;
-
-            int sent_size;
-
-            while(img_total_size > 0){
-                if(img_total_size < block_size){
-                    sent_size = sendfile(fd, fdimg, NULL, img_total_size);            
-                }
-                else{
-                    sent_size = sendfile(fd, fdimg, NULL, block_size);
-                }       
-                if (sent_size < 0) {
-                    die("sendfile");
-                }
-                log(LogLevel::DETAIL, std::format("bytes of file written: {}", sent_size));
-                img_total_size = img_total_size - sent_size;
-            }
-            close(fdimg);
-            log(LogLevel::DETAIL, std::format("file transfer connection closed: {}", fd));
+    auto [resource_path, parameters_opt] = disect_url(url);
+    std::string file_path = std::format("{}{}", mount_dir, translate_resource_path(resource_path));
+    if (is_valid_path(file_path)) {
+        log(LogLevel::INFO, "client requesting and server sending " + file_path);
+        std::string file_extension = file_path.substr(file_path.find_last_of(".") + 1);
+        std::stringstream response_stream;
+        response_stream << "HTTP/1.1 200 Ok\r\n";
+        response_stream << "Content-Type: " << to_string(to_file_type(file_extension)) << "\r\n";
+        log(LogLevel::DETAIL, "response header " + to_string(to_file_type(file_extension)));
+        response_stream << "Connection: close\r\n\r\n";
+        int bytes_sent = send(fd, response_stream.str().data(), response_stream.str().length(), 0);
+        if (bytes_sent < 0) {
+            die("send");
         }
-        else {
-            log(LogLevel::INFO, "client requested a file server did not find " + file_path);
-            std::stringstream response_stream;
-            response_stream << "HTTP/1.1 404 Not Found\r\n";
-            response_stream << "Content-Type: text/html\r\n";
-            response_stream << "Connection: close\r\n\r\n";
-            int bytes_sent = send(fd, response_stream.str().data(), response_stream.str().length(), 0);
-            if (bytes_sent < 0) {
-                die("send");
+        log(LogLevel::DETAIL, "bytes written to client: " + std::to_string(bytes_sent));
+        int fdimg = open(file_path.c_str(), O_RDONLY);
+
+        struct stat stat_buf;
+        fstat(fdimg, &stat_buf);
+        int img_total_size = stat_buf.st_size;
+        int block_size = stat_buf.st_blksize;
+
+        int sent_size;
+
+        while(img_total_size > 0){
+            if(img_total_size < block_size){
+                sent_size = sendfile(fd, fdimg, NULL, img_total_size);            
             }
-            log(LogLevel::DETAIL, "bytes written to client: " + std::to_string(bytes_sent));
+            else{
+                sent_size = sendfile(fd, fdimg, NULL, block_size);
+            }       
+            if (sent_size < 0) {
+                die("sendfile");
+            }
+            log(LogLevel::DETAIL, std::format("bytes of file written: {}", sent_size));
+            img_total_size = img_total_size - sent_size;
         }
+        close(fdimg);
+        log(LogLevel::DETAIL, std::format("file transfer connection closed: {}", fd));
+    }
+    else {
+        log(LogLevel::INFO, "client requested a file server did not find " + file_path);
+        std::stringstream response_stream;
+        response_stream << "HTTP/1.1 404 Not Found\r\n";
+        response_stream << "Content-Type: text/html\r\n";
+        response_stream << "Connection: close\r\n\r\n";
+        int bytes_sent = send(fd, response_stream.str().data(), response_stream.str().length(), 0);
+        if (bytes_sent < 0) {
+            die("send");
+        }
+        log(LogLevel::DETAIL, "bytes written to client: " + std::to_string(bytes_sent));
     }
 }
+
+void send_http_header(int fd, int http_response_status_code, const std::string& http_response_string, std::optional<std::string> body = {}) {
+    std::stringstream response_stream;
+    response_stream << std::format("HTTP/1.1 {} {}\r\n", http_response_status_code, http_response_string);
+    response_stream << "Connection: close\r\n\r\n";
+    if (body.has_value()) {
+        response_stream << body.value();
+    }
+    int bytes_sent = send(fd, response_stream.str().data(), response_stream.str().length(), 0);
+    if (bytes_sent < 0) {
+        die("send");
+    }
+    log(LogLevel::DETAIL, "bytes written to client: " + std::to_string(bytes_sent));
+}
+
+void handle_http_post_request(
+    int fd, 
+    const std::string& mount_dir,
+    const std::string & url, 
+    const std::map<std::string, std::string>& headers,
+    const std::string& body
+)
+{
+    log(LogLevel::INFO, "client POST with url: " + url);
+    log(LogLevel::DETAIL, "post body: " + body);
+    std::string command = std::format("python3 {}/{}.py", mount_dir, url);
+    log(LogLevel::DETAIL, "command: " + command);
+
+    int stop_pipe[2]; // fd[0] - read; fd[1] - write
+    int ptos_pipe[2]; // fd[0] - read; fd[1] - write
+    // Creating pipe and checking that it was created
+    if (pipe(stop_pipe) == -1)
+    {
+        log(LogLevel::WARNING, "stop pipe creation failed");
+        send_http_header(fd, 500, "Internal Server Error");
+        return;
+    }
+    if (pipe(ptos_pipe) == -1)
+    {
+        log(LogLevel::WARNING, "ptos pipe creation failed");
+        send_http_header(fd, 500, "Internal Server Error");
+        return;
+    }
+
+    // Forking the process
+    int id = fork();
+    if (id == -1) // fork error
+    {
+        log(LogLevel::WARNING, "Could not fork a process");
+        send_http_header(fd, 500, "Internal Server Error");
+        return;
+    }
+    else if (id == 0) // child process
+    {
+        dup2(stop_pipe[0], STDIN_FILENO);
+        dup2(ptos_pipe[1], STDOUT_FILENO);
+        execlp("/usr/bin/python3", "/usr/bin/python3", std::format("{}/{}.py", mount_dir, url).c_str(), NULL);
+        log(LogLevel::ERROR, "Failed to run child");
+    }
+    // parent process
+    log(LogLevel::DETAIL, "parent: befor write call, child pid: " + std::to_string(id));
+    if (write(stop_pipe[1], body.data(), body.size()) == -1) {
+        log(LogLevel::ERROR, "Could not write into stop pipe");
+        send_http_header(fd, 500, "Internal Server Error");
+        return;
+    }
+    int status{0};
+    log(LogLevel::DETAIL, "parent: befor waitpid call");
+    waitpid(id, &status, 0);
+    char python_output_buffer[1600];
+    int bytes_read_from_python = read(ptos_pipe[0], &python_output_buffer, 1600);
+    if (bytes_read_from_python == -1) {
+        log(LogLevel::ERROR, "Could not read ptos pipe");
+        send_http_header(fd, 500, "Internal Server Error");
+        return;
+    }
+    log(LogLevel::DETAIL, std::format("read bytes from python: {}", bytes_read_from_python));
+    std::string python_output(python_output_buffer, bytes_read_from_python);
+    log(LogLevel::DETAIL, std::format("python output: {}", python_output));
+    int python_exit_code = WEXITSTATUS(status);
+    close(stop_pipe[1]);
+    close(stop_pipe[0]);
+    close(ptos_pipe[1]);
+    close(ptos_pipe[0]);
+    if (python_exit_code == 0) {
+        send_http_header(fd, 200, "Ok", python_output);
+        log(LogLevel::DETAIL, "python exit: " + std::to_string(python_exit_code));
+    }
+    else {
+        send_http_header(fd, 500, "Internal Server Error");
+        log(LogLevel::WARNING, "python exit: " + std::to_string(python_exit_code));
+    }
+} 
+
 
 
 int main(int argc, char** argv) {
@@ -365,14 +463,21 @@ int main(int argc, char** argv) {
         log(LogLevel::DETAIL, "bytes recieved from client: " + std::to_string(bytes_received));
 
         std::string request(buffer, bytes_received);
-        std::stringstream request_stream(request);
+        size_t head_body_break = request.find("\r\n\r\n");
+        std::string header = request.substr(0, head_body_break);
+        std::string body = request.substr(head_body_break + 4);
+        //log(LogLevel::DETAIL, std::format("full request |{}|", request));
+        //log(LogLevel::DETAIL, std::format("header |{}|", header));
+        //log(LogLevel::DETAIL, std::format("body |{}|", body));
+
+        std::stringstream header_stream(header);
         std::string first_line{};
-        std::getline(request_stream, first_line);
+        std::getline(header_stream, first_line);
         auto opt = process_first_line(first_line);
         if (opt.has_value()) {
             std::string request_line{};
             std::map<std::string, std::string> headers{};
-            while (std::getline(request_stream, request_line)) {
+            while (std::getline(header_stream, request_line)) {
                 size_t found = request_line.find(":");
                 if (found != std::string::npos && request_line.size() > 0) {
                     std::string header_key = trim(request_line.substr(0, found));
@@ -380,9 +485,19 @@ int main(int argc, char** argv) {
                     log(LogLevel::DETAIL, std::format("http header parsed -> {}:{}", header_key, header_val));
                     headers[header_key] = header_val;
                 }
+                else {
+                    log(LogLevel::DETAIL, "request line that have no ':' :" + request_line);
+                }
             }
             // processing and printing of request
-            handle_http_request(connection_fd, mount_dir, opt.value(), headers);
+            switch (std::get<0>(opt.value())) {
+            case HttpMethod::GET:
+                handle_http_get_request(connection_fd, mount_dir, std::get<1>(opt.value()), headers);
+                break;
+            case HttpMethod::POST:
+                handle_http_post_request(connection_fd, mount_dir, std::get<1>(opt.value()), headers, body);
+                break;
+            }
             close(connection_fd);
         }
         else {
