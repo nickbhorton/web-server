@@ -4,3 +4,4 @@ out.txt.prev
 .env
 compile_commands.json
 .cache
+.vscode

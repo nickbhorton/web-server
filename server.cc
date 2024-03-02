@@ -16,6 +16,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h> // sockaddr_in
 #include <sys/stat.h>
+#include <signal.h>
 
 enum class LogLevel {
     DETAIL,
@@ -318,11 +319,17 @@ void send_http_header(int fd, int http_response_status_code, const std::string& 
     if (body.has_value()) {
         response_stream << body.value();
     }
+    std::cout << response_stream.str() << "\n";
     int bytes_sent = send(fd, response_stream.str().data(), response_stream.str().length(), 0);
     if (bytes_sent < 0) {
         die("send");
     }
-    log(LogLevel::DETAIL, "bytes written to client: " + std::to_string(bytes_sent));
+    log(LogLevel::DETAIL, "send_http_header write() returned: " + std::to_string(bytes_sent));
+}
+
+void handle_stop_python_process_sigterm(int a) {
+    log(LogLevel::DETAIL, "inside handle_stop_python_process_sigterm: " + std::to_string(getpid()));
+    exit(0);
 }
 
 void handle_http_post_request(
@@ -355,32 +362,91 @@ void handle_http_post_request(
     }
 
     // Forking the process
-    int id = fork();
-    if (id == -1) // fork error
+    int python_process_pid = fork();
+    if (python_process_pid == -1) // fork error
     {
-        log(LogLevel::WARNING, "Could not fork a process");
+        log(LogLevel::WARNING, "Could not fork the python_process_pid");
         send_http_header(fd, 500, "Internal Server Error");
         return;
     }
-    else if (id == 0) // child process
+    else if (python_process_pid == 0) // python child process
     {
         dup2(stop_pipe[0], STDIN_FILENO);
         dup2(ptos_pipe[1], STDOUT_FILENO);
         execlp("/usr/bin/python3", "/usr/bin/python3", std::format("{}/{}.py", mount_dir, url).c_str(), NULL);
-        log(LogLevel::ERROR, "Failed to run child");
+        log(LogLevel::ERROR, "Failed to python child");
+        exit(0);
     }
     // parent process
-    log(LogLevel::DETAIL, "parent: befor write call, child pid: " + std::to_string(id));
+    // write to python process the body of the request
     if (write(stop_pipe[1], body.data(), body.size()) == -1) {
         log(LogLevel::ERROR, "Could not write into stop pipe");
         send_http_header(fd, 500, "Internal Server Error");
         return;
     }
+
+    // Forking the auto terminate process
+    // int stop_python_process_pid = fork();
+    // if (stop_python_process_pid == -1) // fork error
+    // {
+    //     log(LogLevel::WARNING, "Could not fork the stop_python_process_pid");
+    //     send_http_header(fd, 500, "Internal Server Error");
+    //     kill(python_process_pid, SIGTERM);
+    //     return;
+    // }
+    // else if (stop_python_process_pid == 0) // stop python child process
+    // {
+    //     sleep(3);
+    //     std::string command = "if ps -p " + std::to_string(python_process_pid) 
+    //         + " > /dev/null; then kill -19 " + std::to_string(python_process_pid) + ";fi" ;
+    //     system(command.c_str());
+    //     log(LogLevel::DETAIL, "exiting stop python process");
+    //     exit(0);
+    // }
+    
+    // parent process
+    log(LogLevel::DETAIL, "waitpid for python child process");
     int status{0};
-    log(LogLevel::DETAIL, "parent: befor waitpid call");
-    waitpid(id, &status, 0);
-    char python_output_buffer[1600];
-    int bytes_read_from_python = read(ptos_pipe[0], &python_output_buffer, 1600);
+    waitpid(python_process_pid, &status, 0);
+    // kill the stop python process because the python process exited
+    // std::string kill_stop_python_process = "if ps -p " + std::to_string(stop_python_process_pid) 
+    //         + "; then kill -19 " + std::to_string(stop_python_process_pid) + ";fi" ;
+    // log(LogLevel::DETAIL, kill_stop_python_process);
+    // system(kill_stop_python_process.c_str());
+
+    // log(LogLevel::DETAIL, "after kill stop python process");
+
+    if (WIFEXITED(status)) {
+        log(LogLevel::DETAIL, "python exited, status:" + std::to_string(WEXITSTATUS(status)));
+    } else if (WIFSIGNALED(status)) {
+        log(LogLevel::WARNING, "the status of the python process was TERM");
+    } else if (WIFSTOPPED(status)) {
+        log(LogLevel::WARNING, "the status of the python process was STOP");
+    } else {
+        log(LogLevel::WARNING, "the status of the python process was not TERM or STOP");
+    }
+
+    fd_set set;
+    struct timeval timeout;
+    int rv;
+    constexpr size_t buffer_size = 1600;
+    char python_output_buffer[buffer_size];
+
+    FD_ZERO(&set); /* clear the set */
+    FD_SET(ptos_pipe[0], &set); /* add our file descriptor to the set */
+
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 10000;
+
+    int bytes_read_from_python{};
+    rv = select(ptos_pipe[0] + 1, &set, NULL, NULL, &timeout);
+    if (rv == -1)
+        log(LogLevel::ERROR, "select failed");
+    else if (rv == 0)
+        log(LogLevel::WARNING, "read from python timed out");
+    else
+        bytes_read_from_python = read(ptos_pipe[0], &python_output_buffer, buffer_size); /* there was data to read */
+
     if (bytes_read_from_python == -1) {
         log(LogLevel::ERROR, "Could not read ptos pipe");
         send_http_header(fd, 500, "Internal Server Error");
