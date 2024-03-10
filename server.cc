@@ -18,40 +18,7 @@
 #include <sys/stat.h>
 #include <signal.h>
 
-enum class LogLevel {
-    DETAIL,
-    INFO,
-    WARNING,
-    ERROR
-};
-
-const LogLevel PrintLogLevel = LogLevel::DETAIL;
-
-std::ostream& operator<<(std::ostream & os, LogLevel level) {
-    switch (level) {
-        case LogLevel::DETAIL:
-            os << "DETAIL";
-            break;
-        case LogLevel::INFO:
-            os << "\033[32mINFO\033[m";
-            break;
-        case LogLevel::WARNING:
-            os << "\033[33mWARNING\033[m";
-            break;
-        case LogLevel::ERROR:
-            os << "\033[31mERROR\033[m";
-            break;
-    }
-    return os;
-}
-
-void log(LogLevel level, const std::string& message, std::ostream& os = std::cout) {
-    if (level >= PrintLogLevel) {
-        os << "[" << level << "]: ";
-        os << message;
-        os << "\n" << std::flush;
-    }
-}
+#include "log.h"
 
 void die(const std::string& msg) {
     log(LogLevel::ERROR, std::strerror(errno) + std::format(": {}", msg));

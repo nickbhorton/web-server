@@ -1,7 +1,7 @@
 CXXFLAGS=-std=c++20 -Wall -Werror -Wpedantic
 .PHONY: run nyx clean
 
-server: server.cc
+server: server.cc log.o
 
 run: server
 	./env-local.bash
@@ -13,6 +13,7 @@ nyx: server
 
 clean:
 	rm -f out.txt
+	rm -f *.o
 	rm -f out.txt.prev
 	rm -f server
 	rm -f .env

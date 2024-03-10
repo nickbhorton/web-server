@@ -5,3 +5,4 @@ out.txt.prev
 compile_commands.json
 .cache
 .vscode
+*.o
